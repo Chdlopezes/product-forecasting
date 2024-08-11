@@ -1,6 +1,29 @@
 from dash import html, dcc
 
+def get_items_options():
+    item_options_dict =  {
+       'gid://shopify/ProductVariant/46045546873084': "Item1",
+       'gid://shopify/ProductVariant/43776474284284': "Item2",
+       'gid://shopify/ProductVariant/43926257631484': "Item3",
+       'gid://shopify/ProductVariant/46045546086652': "Item4",       
+    }
+    return item_options_dict
+
 forecast_layout = html.Div([
+    
+    html.Div([
+        html.H1("Forecasting App"),
+        html.Div([
+            html.Label("Select Brand"),
+            dcc.Dropdown(
+                id="selectBrandDropdown",
+                options=["Uhtil", "JO"],
+                value="Uhtil"                
+            )
+        ], className="select-brand-container"),       
+        
+    ], className="title-container"),
+    
     html.Div(
         [        
             html.Div(
@@ -59,12 +82,8 @@ forecast_layout = html.Div([
                 html.Label("Select Item"),
                 dcc.Dropdown(
                     id="itemsDropdown",
-                    options={
-                        "gid://Gizmo/Item/1": "Item 1",
-                        "gid://Gizmo/Item/2": "Item 2",
-                        "gid://Gizmo/Item/3": "Item 3",
-                    },
-                    value="gid://Gizmo/Item/1" 
+                    options=get_items_options(),
+                    value="gid://shopify/ProductVariant/43926257631484" 
                 ),            
                 html.Div(id="selectedItem", style={"display": "none"})                    
             ], className="dropdown-container"),     

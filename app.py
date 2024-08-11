@@ -1,23 +1,41 @@
-from flask import Flask
-from dash import Dash, html, dcc, Input, Output
-from api.flask_api import api_bp
+from flask import Flask, request, url_for
+from dash import Dash, Input, Output
+from api.flask_api import APIBlueprint
 from layout import forecast_layout
-import pandas as pd
+import json
+import requests
 
+api_blueprint = APIBlueprint()
 
 class FlaskDashApp():
     def __init__(self):
         # Intialize Flask server
         self.flask_server = Flask(__name__)
-        self.flask_server.register_blueprint(api_bp)
-        # Intializer Dash app
+        self.flask_server.register_blueprint(api_blueprint.api_bp, url_prefix="/api")  
+        # Assign routes for flask server
+        self.setup_routes()
+        # Intialize Dash app
         self.app = Dash(__name__, server=self.flask_server, url_base_pathname="/dash/")
-        self.app.layout = forecast_layout
+        self.app.layout = forecast_layout          
+        self.setup_dash_callbacks()  
         # Define the general variables
-        self.time_series = pd.DataFrame()
-        self.decomposed_df = pd.DataFrame()       
-        self.ets_params = {}         
+        self.time_series = []
+        self.decomposed_time_series = []
+        self.ets_params = {}
+    
+        
+    def setup_routes(self):        
+        @self.flask_server.route("/test", methods=["GET"])
+        def index():
+            return "Welcome to test", 200
+                
+        
+    def setup_dash_callbacks(self):
         # Define the callbacks    
+        self.app.callback(
+            Output("itemsDropdown", "options"),
+            Input("selectBrandDropdown", "value")
+        )(self.update_brand)
         self.app.callback(
             Output("selectedItem", "children"),
             [
@@ -51,14 +69,37 @@ class FlaskDashApp():
                 Input("predictionsSlider", "value")
             ]
         )(self.update_forecast_df)
+                
 
+    def initialize_request(self):
+        self.base_url = request.host_url    
+        
+    def update_brand(self, brand):
+        request_url = url_for('api.get_brand_items', _external=True)
+        response = requests.get(
+            request_url, 
+            params={
+                "brand": brand
+            }
+        )
+        if response.status_code == 200:
+            api_blueprint.set_sentinel(brand=brand)
+            return response.json()
     
     def update_time_series(self, item, frequency):
-        # make a request to the API which retreives the sales dupdatedParamsata for given item and frequency
-        # create a fictitious time series
-        self.time_series = pd.DataFrame({"ds": pd.date_range("2022-01-01", periods=10), "y": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]})
-        print("Time Series Callback called")
-        return f"Item selected is {item} and frequency is {frequency}"
+        # make a request to the API which retreives the sales dupdatedParamsata for given item and frequency        
+        request_url = url_for('api.get_data', _external=True)
+        # Get the time series provided item
+        response = requests.get(
+            request_url, 
+            params={
+                "item_gid": item, 
+                "frequency": frequency
+            }
+        )
+        self.time_series = response.json()        
+        print("Internal Time series updated")
+        return f"Internal Time series updated"
         
     def update_params(self, period, trend_smooth, seasonal_smooth, add_seasonal):
         self.ets_params = {
@@ -73,7 +114,21 @@ class FlaskDashApp():
         print(f"Decomposition Callback called")
         print(f"Decomposition Method is {decomposition_method}")
         print(f"Params are: {self.ets_params}")
-        return f"Decomposition method is {decomposition_method}"
+        request_url = url_for('api.get_decomposed_data', _external=True)
+        data = {
+            "time_series": self.time_series,
+            "params": self.ets_params
+        }        
+        response = requests.post(
+            request_url,
+            data = json.dumps(data),
+            headers = {"Content-Type": "application/json"}            
+        )
+        
+        if response.status_code == 200:
+            self.decomposed_time_series = response.json()
+        
+        return f"Updated decomposed time series"
     
     
     def update_forecast_df(self, selected_decomposition, model, forecast_method, n_predictions):
