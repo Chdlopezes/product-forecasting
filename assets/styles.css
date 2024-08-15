@@ -9,7 +9,7 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
 }
 
 .select-brand-container {
@@ -55,7 +55,20 @@
 
 .footer-container {
     display: flex;
+    flex-direction: column;        
+}
+
+.forecast-options-container {
+    display: flex;
     flex-direction: row;
     justify-content: space-around;
     align-items: center;
+}
+
+.forecast-button {
+    width: 100px;
+    margin: 10px 20px;
+    border-radius: 10px;
+    padding: 5px;
+    cursor: pointer;
 }

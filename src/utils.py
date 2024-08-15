@@ -175,3 +175,11 @@ def remove_consecutive_zeros_and_get_time_series(df, allowed_consecutive_zeros, 
     index = pd.date_range(end=datetime.now(), periods=len(clean_df), freq=time_range_frequency)
     time_series = pd.Series(clean_df["quantity"].values, index=index)
     return time_series
+
+
+
+def ets_forecast(curve_series, method):
+    pass
+
+def arima_forecast(curve_series, method):
+    pass

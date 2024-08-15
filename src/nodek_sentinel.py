@@ -8,6 +8,7 @@ from src import utils
 class Sentinel():
     def __init__(self, store_name, initialize_data=False):
         self.store_name = store_name
+        self.min_item_orders = 20
         if store_name == "Uhtil":
             self.orders_price_threshold = 200000
         elif store_name == "JO":
@@ -58,10 +59,11 @@ class Sentinel():
         
     def get_items_df(self):
         with self.lock:
-            items_df = self.data.groupby("item_gid").agg({
-                "item_gid": "first",
-                "name": "first",
-            }).reset_index(drop=True)
+            items_df = self.data.groupby("item_gid").agg(
+                name=("name", "first"),
+                n_orders=("item_gid", "count")                
+            ).reset_index()
+            items_df = items_df[items_df["n_orders"] > self.min_item_orders]
             return items_df
     
     def get_time_series(self, item_gid, frequency):
@@ -83,7 +85,7 @@ class Sentinel():
                 )                
             return time_series
             
-    def get_stlf_manual_forecast_figure(time_series, params):
+    def get_stlf_manual_forecast_figure(self, time_series, params):
         time_series_decomposition = STL(
             time_series, 
             period=params.get("period"), 
@@ -92,3 +94,12 @@ class Sentinel():
         ).fit()       
          
         return time_series_decomposition
+    
+    def get_forecast_series(self, curve_series, model, method, n_preds):
+        if model == "ets":
+            forecast_series = utils.ets_forecast(curve_series, method, n_preds)
+        elif model == "arima":
+            forecast_series = utils.arima_forecast(curve_series, method, n_preds)                
+        return forecast_series
+
+            

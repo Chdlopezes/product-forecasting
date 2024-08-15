@@ -719,26 +719,7 @@ class Shop:
                 break
 
         return all_products
-        
-    
-    def get_item_manufacturer_vendor(self, item):
-        response = shopify.GraphQL().execute(
-            query=self.gql,
-            variables={"product_id": item["product_gid"]},
-            operation_name="GetProductVendor",
-        )
-        response = json.loads(response)
-        product_vendor = response["data"]["product"]["vendor"]
-
-        return product_vendor
-    
-    def update_product_seo(self, productUpdate_input):
-        update_product_response = shopify.GraphQL().execute(
-            query=self.gql,
-            variables={"input": productUpdate_input},
-            operation_name="productUpdateSEO",
-        )
-        print(update_product_response)
+                    
 
     def create_collection(self, collectionCreate_input):
         create_collection_response = shopify.GraphQL().execute(

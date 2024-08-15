@@ -21,6 +21,7 @@ class APIBlueprint():
         self.api_bp.route("get_brand_items", methods=["GET"])(self.get_brand_items)
         self.api_bp.route("/data", methods=["GET"])(self.get_data)
         self.api_bp.route("/api/get_decomposed_data", methods=["POST"])(self.get_decomposed_data)
+        self.api_bp.route("/api/get_forecast_data", methods=["POST"])(self.get_forecast_data)
 
     def set_sentinel(self, brand):
         self.brand = brand
@@ -49,27 +50,51 @@ class APIBlueprint():
         if not frequency:
             return {"message": "frequency is required"}, 400
         # TODO : Implement in sentinel mehtod from and to        
-        time_series_df = self.sentinel.get_time_series(item_gid=item_gid, frequency=frequency)
+        time_series = self.sentinel.get_time_series(item_gid=item_gid, frequency=frequency)
         # convert the dataframe to a list of dictionaries
-        data = time_series_df.to_dict(orient="records")    
-        return jsonify(data)
+        time_series_dict = {item.strftime("%Y-%m-%d %H:%M:%S"): value for item,value in  time_series.items()}
+        return jsonify(time_series_dict)
 
     def get_decomposed_data(self):
         if request.method == "POST":
             payload = request.get_json()
             # The data comes from requests library in the form requests.get(url, data={"time_series": [...], "params": {...} }) So I need to parse it            
             time_series = payload.get("time_series", None)
-            if not time_series:
-                return {"message": "time_series is required"}, 400        
-            params = payload.get("params", None)
+            params = payload.get("params", None)            
             if not params:
                 return {"message": "params is required"}, 400
-            time_series_df = pd.DataFrame(time_series)
+            if not time_series or len(time_series) <= 20:
+                return {"message": "time_series too short or missing"}, 400                    
+            if not veryfy_stfl_params_dict(params):
+                return {"message": "invalid stfl params"}, 400
+                
+            time_series_df = pd.Series(time_series)
             if not time_series_df.empty:
-                time_series_df["date"] = pd.to_datetime(time_series_df["date"])                
-            decomposed_df = self.sentinel.get_stlf_manual_forecast_figure(time_series_df, params)
-            decomposed_time_series = decomposed_df.to_dict(orient="records")            
+                time_series_df.index = pd.to_datetime(time_series_df.index)
+            decomposed_df = self.sentinel.get_stlf_manual_forecast_figure(time_series_df, params)            
+            decomposed_time_series = {
+                "trend": {date.strftime("%Y-%m-%d %H:%M:%S"): value for date,value in decomposed_df.trend.items()},
+                "seasonal":{date.strftime("%Y-%m-%d %H:%M:%S"): value for date,value in decomposed_df.seasonal.items()},
+                "residual": {date.strftime("%Y-%m-%d %H:%M:%S"): value for date,value in decomposed_df.resid.items()},
+            }
             return jsonify(decomposed_time_series)
+        
+    def get_forecast_data(self):
+        if request.method == 'POST':
+            request_data = request.get_json()
+            curve = request_data["curve"]
+            model = request_data["model"]
+            method = request_data["method"]
+            n_preds = request_data["n_preds"]
+            forecast_series = self.sentinel.get_forecast_series(curve, model, method, n_preds)
+            # convert the pandas series to dict in order to return it
+            forecast_series_dict = {date.strftime("%Y-%m-%d %H:%M:%S"): value for date,value in forecast_series.items()}
+            return jsonify(forecast_series_dict)
 
 
-
+def veryfy_stfl_params_dict(ets_params_dict):
+    if ets_params_dict.get("period", None):
+        if ets_params_dict.get("trend_smooth", None):
+            if ets_params_dict.get("seasonal_smooth", None):                
+                return True
+    return False
