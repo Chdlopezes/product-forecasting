@@ -3,7 +3,8 @@ import time
 import numpy as np
 import pandas as pd
 from src.shopify_api import Shops
-
+from statsmodels.tsa.seasonal import STL
+from statsmodels.tsa.api import SimpleExpSmoothing, Holt, ExponentialSmoothing
 
 def get_all_shopify_data_from_shopify_api(date_str, store_name):
     date_object = datetime.strptime(date_str, "%Y-%m-%d")
@@ -177,9 +178,64 @@ def remove_consecutive_zeros_and_get_time_series(df, allowed_consecutive_zeros, 
     return time_series
 
 
+def get_model_predictions(fitted_model, n_predictions):
+    model_simulation_df= fitted_model.simulate(
+        n_predictions, 
+        repetitions=100,
+        error="mul",
+        random_errors="bootstrap",
+        random_state=12
+    )       
+    model_simulation_df = model_simulation_df.dropna()    
+    
+    final_forecast = model_simulation_df.median(axis=1)            
+    final_forecast = final_forecast.apply(lambda x: x if x >= 0 else 0)
+    return final_forecast
 
-def ets_forecast(curve_series, method):
-    pass
 
+def ets_forecast(curve_series, method, n_preds):
+    if method == "sse":
+        fitted_model = SimpleExpSmoothing(curve_series, initialization_method="estimated").fit() 
+    elif method == "seasonal_add":
+        fitted_model = ExponentialSmoothing(
+            curve_series,
+            trend=None, 
+            seasonal="add", 
+            damped_trend=False, 
+            initialization_method="estimated",
+            use_boxcox=False
+        ).fit()     
+        
+        
+    elif method == "trend_add":
+        fitted_model = ExponentialSmoothing(
+            curve_series,
+            trend="add", 
+            seasonal=None, 
+            damped_trend=True, 
+            initialization_method="estimated",
+            use_boxcox=False
+        ).fit()     
+        
+    elif method == "trend_seasonal_add":
+        fitted_model = ExponentialSmoothing(
+            curve_series,
+            trend="add", 
+            seasonal="add", 
+            damped_trend=True, 
+            initialization_method="estimated",
+            use_boxcox=False
+        ).fit()
+    else: 
+        raise ValueError("method must be one of: 'sse', 'seasonal_add', 'trend_add', 'trend_seasonal_add'")
+    
+    fitted_model_forecast = get_model_predictions(
+        fitted_model=fitted_model, 
+        n_predictions=n_preds,         
+    )
+    
+    return fitted_model_forecast
+       
+     
 def arima_forecast(curve_series, method):
     pass

@@ -83,10 +83,11 @@ class APIBlueprint():
         if request.method == 'POST':
             request_data = request.get_json()
             curve = request_data["curve"]
+            curve_series = pd.Series(curve)
             model = request_data["model"]
-            method = request_data["method"]
+            method = request_data["forecast_method"]
             n_preds = request_data["n_preds"]
-            forecast_series = self.sentinel.get_forecast_series(curve, model, method, n_preds)
+            forecast_series = self.sentinel.get_forecast_series(curve_series, model, method, n_preds)
             # convert the pandas series to dict in order to return it
             forecast_series_dict = {date.strftime("%Y-%m-%d %H:%M:%S"): value for date,value in forecast_series.items()}
             return jsonify(forecast_series_dict)

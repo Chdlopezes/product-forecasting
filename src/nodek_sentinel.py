@@ -96,8 +96,9 @@ class Sentinel():
         return time_series_decomposition
     
     def get_forecast_series(self, curve_series, model, method, n_preds):
+        curve_series.index = pd.to_datetime(curve_series.index, format="%Y-%m-%d %H:%M:%S")
         if model == "ets":
-            forecast_series = utils.ets_forecast(curve_series, method, n_preds)
+            forecast_series = utils.ets_forecast(curve_series, method, n_preds)            
         elif model == "arima":
             forecast_series = utils.arima_forecast(curve_series, method, n_preds)                
         return forecast_series

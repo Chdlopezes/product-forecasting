@@ -4,6 +4,7 @@ from api.flask_api import APIBlueprint
 from layout import forecast_layout
 import json
 import requests
+import plotly.graph_objects as go
 
 api_blueprint = APIBlueprint()
 
@@ -21,9 +22,9 @@ class FlaskDashApp():
         # Define the general variables
         self.time_series = []
         self.decomposed_time_series = {
-            "trend": [],
-            "seasonal": [],
-            "residual": []
+            "trend": {},
+            "seasonal": {},
+            "residual": {}
         }
         self.stfl_params = {}
         self.forecast_params = {
@@ -83,6 +84,11 @@ class FlaskDashApp():
         )(self.update_decomposed_df)
         
         # Create a Callback to Display STFL Decomposed Chart
+        self.app.callback(
+            Output("chart", "figure"),
+            Input("updatedDecomposedTimeSeries", "children"),
+            prevent_initial_call=True
+        )(self.update_chart_with_decomposed_data)
         
         self.app.callback(            
             Output("forecastMethodDropdown", "options"),            
@@ -198,6 +204,46 @@ class FlaskDashApp():
         return f"Updated decomposed time series"
     
     # def function to graph the decomposed time series
+    def update_chart_with_decomposed_data(self, decomposed_time_series_msg):
+        # make the plot with plotly express
+        dates = list(self.decomposed_time_series["trend"].keys())
+        
+        trend_data = list(self.decomposed_time_series["trend"].values())
+        seasonal_data = list(self.decomposed_time_series["seasonal"].values())
+        residual_data = list(self.decomposed_time_series["residual"].values())
+        if not trend_data or not seasonal_data or not residual_data:
+            print("No decomposed data to plot")
+            return {}        
+        seasonal_adjusted_data = [x + y for x, y in zip(trend_data, residual_data)]
+        full_data = [x + y for x, y in zip(seasonal_adjusted_data, seasonal_data)]        
+        
+        fig = go.Figure()
+        
+        trend_data = go.Scatter(
+            x=dates,
+            y=trend_data,
+            mode="lines",
+            name="Trend",
+        )
+        
+        seasonal_adjusted_figure = go.Scatter(
+            x=dates,
+            y=seasonal_adjusted_data,
+            mode="lines",
+            name="Seasonal Adjusted",  
+            opacity=0.5          
+        )
+        
+        full_data_figure = go.Scatter(
+            x=dates,
+            y=full_data,
+            mode="lines+markers",
+            name="Original Data",
+            marker=dict(color="green", size=5, symbol="square"),
+        )
+        
+        fig.add_traces([trend_data, seasonal_adjusted_figure, full_data_figure])
+        return fig
     
     def update_model(self, model_selected):        
         if model_selected == "ets":            
