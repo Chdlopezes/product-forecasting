@@ -24,7 +24,7 @@ def get_all_shopify_data_from_shopify_api(date_str, store_name):
         print(f"Getting the info from date:{from_date_str} to date: {to_date_str} ...")        
         all_orders = store.get_all_orders(date_str=from_date_str, end_date_str=to_date_str)
         black_list_emails = ["Unknown", "xxxxxx@gmail.com", "joshoescolombia@gmail.com"]                
-        full_order_records = []
+        full_response_data = []
         print(f"INFO: Processing {len(all_orders)} orders")
         for i, order_dict in enumerate(all_orders, start=1) :            
             print("***" * 15)
@@ -32,25 +32,24 @@ def get_all_shopify_data_from_shopify_api(date_str, store_name):
             if order_dict["customer_email"] not in black_list_emails: 
                 order_items = store.get_all_order_items(order_dict["gid"])                
                 order_full_dict = order_dict | {"order_items": order_items}
-                full_order_records.append(order_full_dict)
+                full_response_data.append(order_full_dict)
                 time.sleep(0.3)
         time.sleep(0.5)
-        full_response_data.append(full_order_records)      
+        full_response_data.append(full_response_data)      
                 
     return full_response_data
 
 def get_store_orders_data_from_shopify_api(store_name, date_from, date_to=None):    
-    if store_name == "uhtil":
+    if store_name == "Uhtil":
         store = Shops.Uhtil()
         
-    elif store_name == "jo":
+    elif store_name == "JO":
         store = Shops.JO()
-                    
-    full_response_data = []            
+                        
     print(f"Getting the info from date:{date_from} to date: {date_to} ...")        
     all_orders = store.get_all_orders(date_str=date_from, end_date_str=date_to)
     black_list_emails = ["Unknown", "xxxxxx@gmail.com", "joshoescolombia@gmail.com"]                
-    full_order_records = []
+    full_response_data = []
     print(f"INFO: Processing {len(all_orders)} orders")
     for i, order_dict in enumerate(all_orders, start=1) :            
         print("***" * 15)
@@ -58,38 +57,39 @@ def get_store_orders_data_from_shopify_api(store_name, date_from, date_to=None):
         if order_dict["customer_email"] not in black_list_emails: 
             order_items = store.get_all_order_items(order_dict["gid"])                
             order_full_dict = order_dict | {"order_items": order_items}
-            full_order_records.append(order_full_dict)
+            full_response_data.append(order_full_dict)
             time.sleep(0.3)
-    time.sleep(0.5)
-    full_response_data.append(full_order_records)      
+    time.sleep(0.5)    
             
     return full_response_data
 
     
 def convert_orders_json_response_to_df(full_response_data):
     records_dict = []
-    for data in full_response_data:     
-        for data_dict in data: 
-            for order_item in data_dict['order_items']:
-                records_dict.append({
-                    'order_gid': data_dict['gid'],
-                    'date': data_dict['createdAt'],
-                    'customer_email': data_dict['customer_email'],
-                    'item_gid': order_item['gid'],
-                    'name': order_item['name'],
-                    'product': order_item['product'],
-                    'product_gid': order_item['product_gid'],
-                    'quantity': order_item['quantity'],
-                    'price': order_item['price']               
-                })
+    if len(full_response_data) == 0:
+        return pd.DataFrame()
     
+    for data_dict in full_response_data: 
+        for order_item in data_dict['order_items']:
+            records_dict.append({
+                'order_gid': data_dict['gid'],
+                'date': data_dict['createdAt'],
+                'customer_email': data_dict['customer_email'],
+                'item_gid': order_item['gid'],
+                'name': order_item['name'],
+                'product': order_item['product'],
+                'product_gid': order_item['product_gid'],
+                'quantity': int(order_item['quantity']),
+                'price': int(float(order_item['price']))               
+            })
+
     orders_df = pd.DataFrame(records_dict)
     orders_df["date"] = pd.to_datetime(orders_df["date"])
-    orders_df["date"] = orders_df["date"].apply(lambda x: x.strftime("%Y-%m-%d %H:%M:%S"))
+    orders_df["date"] = orders_df["date"].apply(lambda x: x.strftime("%Y-%m-%d"))
     return orders_df    
 
 
-def remove_days_with_low_sales(orders_df, price_threshold):
+def remove_days_with_low_sales(orders_df, price_threshold):        
         agg_dates_orders_df = orders_df.groupby(by="date").agg({
             "quantity": "sum",
             "price": "sum"

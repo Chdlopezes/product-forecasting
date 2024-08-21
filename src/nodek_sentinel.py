@@ -7,16 +7,17 @@ from src import utils
 
 class Sentinel():
     def __init__(self, store_name, initialize_data=False):
-        self.store_name = store_name
-        self.min_item_orders = 20
+        self.store_name = store_name        
         if store_name == "Uhtil":
             self.orders_price_threshold = 200000
+            self.min_item_orders = 5
         elif store_name == "JO":
             self.orders_price_threshold = 300000
+            self.min_item_orders = 10
         self.data = pd.DataFrame()        
         if initialize_data:
             if store_name == "Uhtil":
-                self.data = pd.read_csv("data/uhtil_orders.csv")
+                self.data = pd.read_csv("data/Uhtil_orders.csv")
             elif store_name == "JO":
                 self.data = pd.read_csv("data/JO_orders.csv")
         self.lock = threading.Lock()
@@ -56,18 +57,60 @@ class Sentinel():
             # drop data older than time_range
             last_date_to_keep = pd.Timestamp.now() - pd.Timedelta(days=self.time_range)
             self.data = self.data[self.data["date"] > last_date_to_keep]            
+            self.data.to_csv(f"data/{store_name}_orders.csv", index=False)
         
+    
+    def update_data(self, from_date=None):
+        if not from_date:
+            from_date = pd.Timestamp.now() - pd.Timedelta(days=self.time_range)
+            try: 
+                last_date_in_data = pd.to_datetime(self.data["date"].max())
+                from_date = max(from_date, last_date_in_data)                
+            except Exception as e:
+                print(e)
+                
+                
+        updated_df = pd.DataFrame()        
+        # while date < today
+        while from_date < pd.Timestamp.now():
+            to_date = from_date + pd.Timedelta(days=1)
+            from_date_str = from_date.strftime("%Y-%m-%d")
+            to_date_str = to_date.strftime("%Y-%m-%d")
+                          
+            shopify_orders_response_data = utils.get_store_orders_data_from_shopify_api(
+                store_name=self.store_name, 
+                date_from=from_date_str, 
+                date_to=to_date_str            
+            )
+            shopify_orders_df = utils.convert_orders_json_response_to_df(shopify_orders_response_data)
+            updated_df = pd.concat([updated_df, shopify_orders_df])
+            from_date +=  pd.Timedelta(days=1)
+        
+        updated_orders_df = utils.remove_days_with_low_sales(updated_df, price_threshold=self.orders_price_threshold)           
+        with self.lock:
+            self.data = pd.concat([self.data, updated_orders_df])
+            self.data["date"] = pd.to_datetime(self.data["date"])       
+            # drop data older than time_range
+            last_date_to_keep = pd.Timestamp.now() - pd.Timedelta(days=self.time_range)
+            self.data = self.data[self.data["date"] >= last_date_to_keep]
+            self.data.to_csv(f"data/{self.store_name}_orders.csv", index=False)
+                                  
+    
     def get_items_df(self):
         with self.lock:
+            if self.data.empty:
+                return pd.DataFrame()
+            
             items_df = self.data.groupby("item_gid").agg(
                 name=("name", "first"),
                 n_orders=("item_gid", "count")                
             ).reset_index()
-            items_df = items_df[items_df["n_orders"] > self.min_item_orders]
+            items_df = items_df[items_df["n_orders"] >= self.min_item_orders]
             return items_df
     
     def get_time_series(self, item_gid, frequency):
-        # convert self.data to a pandas series whose index is date
+        # create a copy of self.data whose date is in datetime with string format "%Y-%m-%d"        
+        # convert orders_df to a pandas series whose index is date
         with self.lock:
             if frequency == "daily":
                 item_orders_df_daily, item_orders_stats = utils.get_aggregated_orders_by_day(orders_df=self.data, item_gid=item_gid)
@@ -96,7 +139,7 @@ class Sentinel():
         return time_series_decomposition
     
     def get_forecast_series(self, curve_series, model, method, n_preds):
-        curve_series.index = pd.to_datetime(curve_series.index, format="%Y-%m-%d %H:%M:%S")
+        curve_series.index = pd.to_datetime(curve_series.index, format="%Y-%m-%d")
         if model == "ets":
             forecast_series = utils.ets_forecast(curve_series, method, n_preds)            
         elif model == "arima":

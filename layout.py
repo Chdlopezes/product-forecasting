@@ -14,15 +14,27 @@ forecast_layout = html.Div([
     
     html.Div([
         html.H1("Forecasting App"),
-        html.Div([
-            html.Label("Select Brand"),
-            dcc.Dropdown(
-                id="selectBrandDropdown",
-                options=["Uhtil", "JO"],
-                value="Uhtil"                
-            )
-        ], className="select-brand-container"),       
-        
+        html.Div(
+            [
+                html.Div([
+                    html.Label("Select Brand"),
+                    dcc.Dropdown(
+                        id="selectBrandDropdown",
+                        options=["Uhtil", "JO"],
+                        value="Uhtil"                
+                    )
+                ], className="select-brand-container"),
+                html.Div([
+                    html.Button(
+                        "Update Data", 
+                        id="update_data_btn", 
+                        className="update-data-btn",
+                        n_clicks=0
+                    ),                    
+                ], className="update-data-btn-container"),
+                html.Div(id="update_data_status", style={"display": "none"}),
+            ]
+        )
     ], className="title-container"),
     
     html.Div(
@@ -100,10 +112,19 @@ forecast_layout = html.Div([
                         html.Label("Model"),
                         dcc.Dropdown(
                             id="modelDropdown",        
-                            options={
-                                "ets": "Exponential Smoothing",
-                                "arima": "ARIMA",                        
-                            },                            
+                            options=[
+                                {
+                                    "label": "Exponential Smoothing", 
+                                    "value": "ets",
+                                    "disabled": False
+                                },
+                                {
+                                    "label": "ARIMA",
+                                    "value": "arima",
+                                    "disabled": True                                                                    
+                                }                            
+                            ]
+                            
                         ),
                         html.Div(id="selectedModel", style={"display": "none"})
                     ],
@@ -125,11 +146,21 @@ forecast_layout = html.Div([
                         html.Label("Curve to Forecast"),
                         dcc.Dropdown(
                             id="curveDropdown",        
-                            options={
-                                "trend": "Trend",
-                                "seasonal_adjusted": "Seasonal Adjusted",
-                                "normal": "Normal"
-                            }                            
+                            options=[
+                                {
+                                    "label": html.Span(["Trend"], style={"color": "blue"}),
+                                    "value": "trend",                                    
+                                },
+                                {
+                                    "label": html.Span(["Seasonal Adjusted"], style={"color": "#ff3c4c"}),
+                                    "value": "seasonal_adjusted",
+                                },
+                                {
+                                    "label": html.Span(["Normal"], style={"color": "green"}),
+                                    "value": "normal",
+                                }
+                                
+                            ]                                                        
                         ),
                         html.Div(id="selectedCurve", style={"display": "none"})
                     ],
@@ -154,7 +185,10 @@ forecast_layout = html.Div([
                     className="forecast-button",
                     n_clicks=0,
                     disabled=True
-                )                                        
+                ),
+                
+                html.Div(id="forecastData", style={"display": "none"}),                        
+                              
             ], className="forecast-options-container"),            
             
             html.Div(id="forecastParams", style={"display": "none"}),
@@ -164,5 +198,12 @@ forecast_layout = html.Div([
 
     ], className="chart-container"),
     
-    html.Div(children=[], id="messageDiv" )        
+    html.Div(children=[], id="messageDiv" ),
+    
+    dcc.Interval(
+        id="update_interval", 
+        interval=1*3600*1000, 
+        n_intervals=0
+    )        
+    
 ], className="main-container") 

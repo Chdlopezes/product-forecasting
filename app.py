@@ -1,5 +1,5 @@
 from flask import Flask, request, url_for
-from dash import Dash, Input, Output
+from dash import Dash, Input, Output, State
 from api.flask_api import APIBlueprint 
 from layout import forecast_layout
 import json
@@ -21,6 +21,7 @@ class FlaskDashApp():
         self.setup_dash_callbacks()  
         # Define the general variables
         self.time_series = []
+        self.frequency = None
         self.decomposed_time_series = {
             "trend": {},
             "seasonal": {},
@@ -33,6 +34,9 @@ class FlaskDashApp():
             "forecast_curve": None,
             "n_preds": None            
         }
+        self.forecast_data = {}
+        self.current_figure = {}
+        
     
 
     def setup_routes(self):        
@@ -44,15 +48,24 @@ class FlaskDashApp():
     def setup_dash_callbacks(self):
         # Define the callbacks    
         self.app.callback(
+            Output("update_data_status", "children"),
+            Input("update_data_btn", "n_clicks"),
+        )(self.update_data)      
+        
+        
+        self.app.callback(
             Output("itemsDropdown", "options"),
-            Input("selectBrandDropdown", "value")
-        )(self.update_brand)        
+            Input("selectBrandDropdown", "value"),
+            Input("update_data_status", "children"),
+        )(self.update_brand_or_data)  
+                
         
         self.app.callback(            
             Output("selectedItem", "children"),
             [
                 Input("itemsDropdown", "value"),
                 Input("frequencyDropdown", "value"),
+                Input("update_interval", "n_intervals"),                
             ]            
         )(self.update_time_series)
         
@@ -85,8 +98,8 @@ class FlaskDashApp():
         
         # Create a Callback to Display STFL Decomposed Chart
         self.app.callback(
-            Output("chart", "figure"),
-            Input("updatedDecomposedTimeSeries", "children"),
+            Output("chart", "figure", allow_duplicate=True),
+            Input("updatedDecomposedTimeSeries", "children"),            
             prevent_initial_call=True
         )(self.update_chart_with_decomposed_data)
         
@@ -116,14 +129,34 @@ class FlaskDashApp():
             ]           
         )(self.check_forecast_button)
         
-        self.app.callback(
-            Input("forecastButton", "n_clicks"),
+        self.app.callback(       
+            Output("forecastData", "children"),     
+            Input("forecastButton", "n_clicks"),                        
         )(self.update_forecast_data)
+        
+        self.app.callback(
+            Output("chart", "figure", allow_duplicate=True),
+            Input("forecastData", "children"),            
+            prevent_initial_call=True
+        )(self.update_chart_with_forecast_data)
+                
 
     def initialize_request(self):
         self.base_url = request.host_url    
-        
-    def update_brand(self, brand):
+    
+    def update_data(self, n_clicks):
+        if n_clicks > 0:
+            request_url = url_for('api.update_data', _external=True)
+            response = requests.get(
+                request_url
+            )
+            if response.status_code == 200:
+                return "updated"               
+            else:
+                raise Exception("Failed to update data")            
+    
+    def update_brand_or_data(self, brand, updated_data_msg):        
+        api_blueprint.set_sentinel(brand=brand)
         request_url = url_for('api.get_brand_items', _external=True)
         response = requests.get(
             request_url, 
@@ -131,8 +164,7 @@ class FlaskDashApp():
                 "brand": brand
             }
         )
-        if response.status_code == 200:
-            api_blueprint.set_sentinel(brand=brand)
+        if response.status_code == 200:            
             return response.json()
     
     def update_stfl_params(self, frequency):
@@ -159,11 +191,12 @@ class FlaskDashApp():
             trend_smooth_max, 
             seasonal_smooth_min, 
             seasonal_smooth_max
-        )
-                                                                
-    def update_time_series(self, item, frequency):
+        )            
+                                                 
+    def update_time_series(self, item, frequency, n_intervals):
+        print("Updated Time Series: {n_intervals}")
         # make a request to the API which retreives the sales dupdatedParamsata for given item and frequency        
-        request_url = url_for('api.get_data', _external=True)
+        request_url = url_for('api.get_item_data', _external=True)
         # Get the time series provided item
         response = requests.get(
             request_url, 
@@ -172,7 +205,8 @@ class FlaskDashApp():
                 "frequency": frequency
             }
         )
-        self.time_series = response.json()        
+        self.time_series = response.json() 
+        self.frequency = frequency       
         print("Internal Time series updated")
         return f"Internal Time series updated"
         
@@ -190,7 +224,8 @@ class FlaskDashApp():
         request_url = url_for('api.get_decomposed_data', _external=True)
         data = {
             "time_series": self.time_series,
-            "params": self.stfl_params
+            "params": self.stfl_params,
+            "frequency": self.frequency
         }        
         response = requests.post(
             request_url,
@@ -224,6 +259,8 @@ class FlaskDashApp():
             y=trend_data,
             mode="lines",
             name="Trend",
+            opacity=0.7,
+            line = dict(color="blue")
         )
         
         seasonal_adjusted_figure = go.Scatter(
@@ -231,18 +268,20 @@ class FlaskDashApp():
             y=seasonal_adjusted_data,
             mode="lines",
             name="Seasonal Adjusted",  
-            opacity=0.5          
+            opacity=0.5,
+            line=dict(color="#ff3c4c")          
         )
         
         full_data_figure = go.Scatter(
             x=dates,
             y=full_data,
             mode="lines+markers",
-            name="Original Data",
+            name="Original Data",            
             marker=dict(color="green", size=5, symbol="square"),
         )
         
         fig.add_traces([trend_data, seasonal_adjusted_figure, full_data_figure])
+        self.current_figure = fig
         return fig
     
     def update_model(self, model_selected):        
@@ -284,7 +323,7 @@ class FlaskDashApp():
                 return True
         return False
     
-    def update_forecast_data(self, n_clicks):
+    def update_forecast_data(self, n_clicks):        
         if n_clicks > 0:
             request_url = url_for('api.get_forecast_data', _external=True)
             headers = {"Content-Type": "application/json"}
@@ -307,12 +346,38 @@ class FlaskDashApp():
                 headers = headers                
             )
             
-            if response.status_code == 200:
-                self.forecast_data = response.json()
+            if response.status_code == 200:                
+                self.forecast_data = response.json()                
                 
             else:
                 raise Exception("Failed to get forecast data")
+        
+        return f"Updated forecast data"
     
+    def update_chart_with_forecast_data(self, forecast_data_msg):
+        if not self.current_figure:
+            return {}
+        
+        fig = go.Figure(self.current_figure)
+        
+        if forecast_data_msg:
+            dates = list(self.forecast_data.keys())
+            forecast_data = list(self.forecast_data.values())
+            forecast_data_figure = go.Scatter(
+                x=dates,
+                y=forecast_data,
+                mode="markers",
+                marker=dict(
+                    symbol="star",
+                ),                
+                name="forecast"
+            )
+            fig.add_traces([forecast_data_figure])
+            
+            return fig
+        
+        return fig
+        
     # Define the run method
     def run(self):
         self.flask_server.run(debug=True)
