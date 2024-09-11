@@ -73,6 +73,15 @@
     cursor: pointer;
 }
 
+.export-button {
+    width: 100px;
+    margin: 10px 20px;
+    border: 1px solid green;
+    border-radius: 10px;
+    padding: 5px;
+    cursor: pointer;
+}
+
 .update-data-btn-container {
     margin-top: 10px;
 }
@@ -90,4 +99,11 @@
 .update-data-btn:hover {    
     color: white;
     background-color: green;    
+}
+
+.col-separated-centered-buttons {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }

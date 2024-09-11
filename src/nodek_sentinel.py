@@ -1,19 +1,22 @@
+from os import getenv
+from dotenv import load_dotenv
 import pandas as pd
 import threading
 from statsmodels.tsa.seasonal import STL
 from apscheduler.schedulers.background import BackgroundScheduler
 from src import utils
 
+load_dotenv(".env")
 
 class Sentinel():
     def __init__(self, store_name, initialize_data=False):
         self.store_name = store_name        
         if store_name == "Uhtil":
-            self.orders_price_threshold = 200000
-            self.min_item_orders = 5
+            self.orders_price_threshold = int(getenv("UHTIL_ORDERS_PRICE_THRESHOLD"))
+            self.min_item_orders = int(getenv("UHTIL_MIN_ITEM_ORDERS"))
         elif store_name == "JO":
-            self.orders_price_threshold = 300000
-            self.min_item_orders = 10
+            self.orders_price_threshold = int(getenv("JO_ORDERS_PRICE_THRESHOLD"))
+            self.min_item_orders = int(getenv("JO_MIN_ITEM_ORDERS"))
         self.data = pd.DataFrame()        
         if initialize_data:
             if store_name == "Uhtil":
@@ -21,7 +24,8 @@ class Sentinel():
             elif store_name == "JO":
                 self.data = pd.read_csv("data/JO_orders.csv")
         self.lock = threading.Lock()
-        self.time_range = 60 # in days
+        self.time_range = int(getenv("TIME_RANGE_IN_FORECAST")) # in days
+        self.update_frequency_in_hours = int(getenv("UPDATE_FREQUENCY_OF_SENTINEL_IN_HOURS"))
         
         
     def start(self, from_date):
@@ -30,7 +34,7 @@ class Sentinel():
             func=self.retrieve_and_store_orders_data, 
             kwargs={"store_name": self.store_name, "data_from_str": from_date},
             trigger='interval',
-            hours=24
+            hours=self.update_frequency_in_hours,
         )
         scheduler.start()
                             

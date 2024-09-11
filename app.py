@@ -1,3 +1,5 @@
+import os
+from datetime import datetime, timedelta
 from flask import Flask, request, url_for
 from dash import Dash, Input, Output, State
 from api.flask_api import APIBlueprint 
@@ -5,6 +7,7 @@ from layout import forecast_layout
 import json
 import requests
 import plotly.graph_objects as go
+import pandas as pd 
 
 api_blueprint = APIBlueprint()
 
@@ -20,6 +23,10 @@ class FlaskDashApp():
         self.app.layout = forecast_layout          
         self.setup_dash_callbacks()  
         # Define the general variables
+        self.selected_brand = "Uhtil"
+        self.items_dict = {}
+        self.selected_item_gid = None
+        self.selected_item_name = None
         self.time_series = []
         self.frequency = None
         self.decomposed_time_series = {
@@ -139,6 +146,15 @@ class FlaskDashApp():
             Input("forecastData", "children"),            
             prevent_initial_call=True
         )(self.update_chart_with_forecast_data)
+        
+        self.app.callback(
+            Output("exportButton", "disabled"),
+            Input("forecastData", "children"),
+        )(self.check_export_button)
+        
+        self.app.callback(
+            Input("exportButton", "n_clicks"),
+        )(self.handle_export_button)
                 
 
     def initialize_request(self):
@@ -157,6 +173,7 @@ class FlaskDashApp():
     
     def update_brand_or_data(self, brand, updated_data_msg):        
         api_blueprint.set_sentinel(brand=brand)
+        self.selected_brand = brand
         request_url = url_for('api.get_brand_items', _external=True)
         response = requests.get(
             request_url, 
@@ -164,8 +181,9 @@ class FlaskDashApp():
                 "brand": brand
             }
         )
-        if response.status_code == 200:            
-            return response.json()
+        if response.status_code == 200:
+            self.items_dict = response.json()           
+            return self.items_dict
     
     def update_stfl_params(self, frequency):
         print("Update stfl Callback called")
@@ -205,6 +223,8 @@ class FlaskDashApp():
                 "frequency": frequency
             }
         )
+        self.selected_item_gid = item
+        self.selected_item_name = self.items_dict.get(item)
         self.time_series = response.json() 
         self.frequency = frequency       
         print("Internal Time series updated")
@@ -323,7 +343,10 @@ class FlaskDashApp():
                 return True
         return False
     
-    def update_forecast_data(self, n_clicks):        
+    def update_forecast_data(self, n_clicks):      
+        dates = self.decomposed_time_series["trend"].keys()  
+        seasonal_adjusted_data = {date: self.decomposed_time_series["trend"][date] + self.decomposed_time_series["residual"][date] for date in dates}
+        full_data = {date: seasonal_adjusted_data[date] + self.decomposed_time_series["seasonal"][date] for date in dates}
         if n_clicks > 0:
             request_url = url_for('api.get_forecast_data', _external=True)
             headers = {"Content-Type": "application/json"}
@@ -331,12 +354,9 @@ class FlaskDashApp():
             if curve == "trend":
                 curve_data = self.decomposed_time_series["trend"]
             elif curve == "seasonal_adjusted":
-                curve_data = self.decomposed_time_series["trend"] 
-                + self.decomposed_time_series["residual"]
+                curve_data = seasonal_adjusted_data
             else:
-                curve_data = self.decomposed_time_series["trend"] 
-                + self.decomposed_time_series["seasonal"] 
-                + self.decomposed_time_series["residual"]
+                curve_data = full_data
             
             payload = {"curve": curve_data} | self.forecast_params
             
@@ -377,7 +397,45 @@ class FlaskDashApp():
             return fig
         
         return fig
-        
+    
+    def check_export_button(self, forecast_data):
+        if self.forecast_data:
+            return False
+        return True
+    
+    def handle_export_button(self, n_clicks):
+        if n_clicks > 0:
+            date_from = datetime.now().strftime("%Y-%m-%d")
+            date_to = datetime.now() + timedelta(days=self.forecast_params['n_preds'])
+            date_to = date_to.strftime("%Y-%m-%d")
+            print("***" * 30)
+            if not os.path.isdir(f"data/results/{self.selected_brand}"):
+                os.makedirs(f"data/results/{self.selected_brand}")
+                
+            file_name = f"forecast_{date_from}.csv"
+            if not os.path.isfile(f"data/results/{self.selected_brand}/{file_name}"):
+                export_df = pd.DataFrame(columns=["item_name", "forecast_model", "forecast_method", "forecast_curve", "pred_from", "pred_to", "value"])
+            else:
+                export_df = pd.read_csv(f"data/results/{self.selected_brand}/{file_name}")
+            
+            # Update the export_df with new data
+            item_name = self.selected_item_name
+            forecast_model = self.forecast_params["model"]
+            forecast_method = self.forecast_params["forecast_method"]
+            forecast_curve = self.forecast_params["forecast_curve"]
+            value = sum(list(self.forecast_data.values()))
+            value = round(value, 2)
+            update_row = export_df.loc[
+                (export_df["item_name"] == item_name) & (export_df["forecast_model"] == forecast_model) & (export_df["forecast_method"] == forecast_method)
+            ] 
+            if update_row.empty:
+                update_index = len(export_df)
+            else:
+                update_index = update_row.index
+            
+            export_df.loc[update_index] = [item_name, forecast_model, forecast_method, forecast_curve, date_from, date_to, value]
+            export_df.to_csv(f"data/results/{self.selected_brand}/{file_name}", index=False)
+
     # Define the run method
     def run(self):
         self.flask_server.run(debug=True)

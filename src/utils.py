@@ -123,7 +123,7 @@ def get_aggregated_orders_by_day(orders_df, item_gid):
         item_date_range = [date.strftime("%Y-%m-%d") for date in item_date_range]
         item_time_series = []
         for item_date in item_date_range:
-            filtered_row = item_df_groupped[item_df_groupped["date"].str.contains(item_date)]    
+            filtered_row = item_df_groupped[item_df_groupped["date"].astype('str').str.contains(item_date)]
             if filtered_row.empty: 
                 item_time_series_record = {
                     "date": item_date,

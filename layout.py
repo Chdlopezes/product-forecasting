@@ -179,20 +179,29 @@ forecast_layout = html.Div([
                     )                            
                 ], className="dropdown-container"),
                 
-                html.Button(
-                    "Forecast",
-                    id="forecastButton",
-                    className="forecast-button",
-                    n_clicks=0,
-                    disabled=True
-                ),
+                html.Div([
+                    html.Button(
+                        "Forecast",
+                        id="forecastButton",
+                        className="forecast-button",
+                        n_clicks=0,
+                        disabled=True
+                    ),
+                    html.Button(
+                        "Exportar Predicción",
+                        id="exportButton",
+                        className="export-button",
+                        n_clicks=0,
+                        disabled=True
+                    )
+                ], className="col-separated-centered-buttons"),
                 
                 html.Div(id="forecastData", style={"display": "none"}),                        
                               
             ], className="forecast-options-container"),            
             
             html.Div(id="forecastParams", style={"display": "none"}),
-
+            html.Div(id="exportDataDivMessage", style={"display": "none"}),
         ], className="footer-container"), 
         
 
